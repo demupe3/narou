@@ -13,6 +13,23 @@ require_relative "windows/eject"
 class Device
   module Library
     module Windows
+      def kindle_mtp(action, source = nil)
+        require "open3"
+        script = File.expand_path("kindle_mtp.ps1", __dir__)
+        args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action]
+        args.concat(["-Source", File.expand_path(source)]) if source
+        out, err, status = Open3.capture3(*args)
+        unless status.success?
+          raise Device::SendFailure, "Kindle MTP処理に失敗しました: #{err.force_encoding(Encoding::UTF_8).scrub.strip}"
+        end
+        out.force_encoding(Encoding::UTF_8).scrub.strip
+      end
+
+      def kindle_mtp_connected?
+        kindle_mtp("detect") == "YES"
+      rescue Device::SendFailure
+        false
+      end
       def get_device_root_dir(volume_name)
         @@FileSystemObject ||= WIN32OLE.new("Scripting.FileSystemObject")
         drives.each do |drive_letter|

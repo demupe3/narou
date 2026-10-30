@@ -44,7 +44,14 @@ module Narou
               @cancel_signal = false
             else
               @thread_of_block_executing = Thread.new do
-                q[:block].call
+                begin
+                  q[:block].call
+                rescue SystemExit
+                  # A command may exit; keep the web server running.
+                rescue Exception => e
+                  # Catch here before Thread.abort_on_exception can stop the server.
+                  output_error($stdout, e)
+                end
               end
               @thread_of_block_executing.join
               @thread_of_block_executing = nil

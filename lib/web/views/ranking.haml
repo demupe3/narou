@@ -1,0 +1,40 @@
+%link(rel="stylesheet" href="/resources/ranking-colors.css?v=3")
+%main.container(style="padding-top: 24px; max-width: 1000px")
+  %p
+    %a(href="/") ← Narou.rb の一覧に戻る
+  %h1 ランキング
+  %p 公式APIの日間・週間・月間・四半期ランキングから上位100件を表示します。
+  %p 集計日を選択して「表示」を押してください。本文の取得は行いません。
+  %p 「Downloadへ」は既存のダウンロード画面に移動します。実行すると本文を自動取得します。
+  %form#ranking-form.ranking-toolbar
+    .ranking-field
+      %label(for="ranking-kind") 種別
+      %select#ranking-kind
+        %option(value="d") 日間
+        %option(value="w") 週間（火曜日）
+        %option(value="m") 月間（毎月1日）
+        %option(value="q") 四半期（毎月1日）
+    .ranking-field
+      %label(for="ranking-date") 集計日
+      %input#ranking-date(type="date" required)
+    %button(type="submit") 表示
+    .ranking-filters
+      %label
+        %input#ranking-completed(type="checkbox")
+        完結作品のみ
+      %label
+        %input#ranking-hide-registered(type="checkbox")
+        管理中を除く
+  %p#ranking-status(role="status" style="margin-top: 16px")
+  %div#ranking-results
+  %dialog#ranking-story-dialog.ranking-story-dialog(aria-labelledby="ranking-story-title")
+    .ranking-story-content
+      .ranking-story-header
+        %h2#ranking-story-title あらすじ
+        %button#ranking-story-close.ranking-story-close(type="button" aria-label="あらすじを閉じる") ×
+      %p#ranking-story-text.ranking-story-text
+  %p
+    出典：
+    %a(href="https://dev.syosetu.com/" target="_blank" rel="noopener noreferrer") なろうデベロッパー
+  %p ランキングは取得時点の情報です。日間APIは朝の集計分を提供します。R18ランキングは対象外です。
+%script(src="/resources/ranking.js?v=3")

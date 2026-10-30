@@ -17,6 +17,7 @@ require "tilt/haml"
 require "tilt/sass"
 require_relative "../commandline"
 require_relative "../inventory"
+require_relative "../narou/ranking"
 require_relative "web_worker"
 require_relative "pushserver"
 require_relative "settingmessages"
@@ -210,6 +211,27 @@ class Narou::AppServer < Sinatra::Base
     haml :index, layout: true
   end
 
+  get "/ranking" do
+    @title = "ランキング"
+    haml :ranking, layout: true
+  end
+
+  get "/api/ranking" do
+    registered = Database.instance.get_object.values.map do |entry|
+      url = entry["toc_url"].to_s
+      match = url.match(%r{\Ahttps?://ncode\.syosetu\.com/(n\d+[a-z]+)/?}i)
+      match && match[1].downcase
+    end.compact
+    items = Narou::Ranking.fetch(date: params["date"].to_s, kind: params["kind"].to_s, registered: registered)
+    json items: items
+  rescue ArgumentError => e
+    status 400
+    json error: e.message
+  rescue StandardError => e
+    warn "ランキング取得エラー: #{e.class}: #{e.message}"
+    status 502
+    json error: "ランキングを取得できませんでした。時間をおいて再試行してください。"
+  end
   get "/style.css" do
     scss :style
   end

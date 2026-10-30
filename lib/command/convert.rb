@@ -5,6 +5,7 @@
 #
 
 require "fileutils"
+require "tmpdir"
 require_relative "../downloader"
 require_relative "../novelconverter"
 require_relative "../inventory"
@@ -207,6 +208,30 @@ module Command
     end
 
     def convert_novel_main(target, index)
+      return convert_novel_main_impl(target, index) if File.file?(target.to_s)
+      return convert_novel_main_impl(target, index) unless Downloader.novel_exists?(target)
+
+      paths = NovelConverter.extensions_of_converted_files(@device).flat_map do |ext|
+        Narou.get_ebook_file_paths(target, ext)
+      end.compact.uniq.select { |path| File.file?(path) }
+      Dir.mktmpdir("narou-convert-backup-") do |dir|
+        backups = paths.each_with_index.map do |path, i|
+          backup = File.join(dir, i.to_s)
+          FileUtils.copy_file(path, backup)
+          [path, backup]
+        end
+        @conversion_succeeded = false
+        begin
+          convert_novel_main_impl(target, index)
+        ensure
+          unless @conversion_succeeded
+            backups.each { |path, backup| FileUtils.copy_file(backup, path) }
+          end
+        end
+      end
+    end
+
+    def convert_novel_main_impl(target, index)
       @target = target
       @novel_data = nil
 
@@ -245,17 +270,22 @@ module Command
       return unless res
       array_of_converted_txt_path = res[:converted_txt_paths]
       ebook_file = nil
+      conversion_ok = !array_of_converted_txt_path.empty?
       array_of_converted_txt_path.each do |converted_txt_path|
         @converted_txt_path = converted_txt_path
         @use_dakuten_font = res[:use_dakuten_font]
 
         ebook_file = hook_call(:convert_txt_to_ebook_file)
-        next if ebook_file.nil?
+        if ebook_file.nil?
+          conversion_ok = false
+          next
+        end
         if ebook_file
           copy_to_converted_file(ebook_file)
           send_file_to_device(ebook_file) unless using_send_command
         end
       end
+      @conversion_succeeded = conversion_ok
       send_file_to_device(ebook_file) if
         using_send_command && ebook_file
 
