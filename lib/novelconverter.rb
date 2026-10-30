@@ -174,7 +174,15 @@ class NovelConverter
       abs_srcpath = Helper.convert_to_windows_path(abs_srcpath)
     end
     Dir.chdir(aozoraepub3_dir)
-    command = %!java #{java_encoding} -cp #{aozoraepub3_basename} AozoraEpub3 -enc UTF-8 -of #{device_option} ! +
+    # Use the runtime distributed alongside AozoraEpub3 when available.
+    # Paths are relative to aozoraepub3_dir, which is the current directory here.
+    bundled_java = Helper.os_windows? ? "runtime/bin/java.exe" : "runtime/bin/java"
+    java_command = if File.file?(bundled_java)
+                     Helper.os_windows? ? "runtime\\bin\\java.exe" : "./runtime/bin/java"
+                   else
+                     "java"
+                   end
+    command = %!#{java_command} #{java_encoding} -cp #{aozoraepub3_basename} AozoraEpub3 -enc UTF-8 -of #{device_option} ! +
               %!#{cover_option} #{dst_option} #{ext_option} #{yokogaki_option} "#{abs_srcpath}"!
     if Helper.os_windows?
       command = "cmd /c #{command}".encode(Encoding::Windows_31J)
@@ -256,6 +264,8 @@ class NovelConverter
     if Helper.os_cygwin?
       epub_path = Helper.convert_to_windows_path(epub_path)
     end
+    expected_mobi = epub_path.sub(/\.epub\z/i, ".mobi")
+    previous_mobi = File.file?(expected_mobi) ? [File.size(expected_mobi), File.mtime(expected_mobi)] : nil
     command = +%!"#{kindlegen_path}" -locale ja "#{epub_path}"!
     if Helper.os_windows?
       command.encode!(Encoding::Windows_31J)
@@ -274,18 +284,20 @@ class NovelConverter
       stream_io.puts "=" * 79
     end
 
-    if proccess_status.exited?
-      if proccess_status.exitstatus == 2
-        stream_io.puts
-        stream_io.error "kindlegen実行中にエラーが発生したため、MOBIが出力出来ませんでした"
-        if stdout_capture.scan(/(エラー\(.+?\):\w+?:.+)$/)
-          stream_io.error $1
-        end
-        return :error
-      end
-    else
+    unless proccess_status.exited?
       stream_io.puts
       return :abort
+    end
+    mobi_path = epub_path.sub(/\.epub\z/i, ".mobi")
+    valid_mobi = File.file?(mobi_path) && File.size(mobi_path) >= 68 &&
+                 [File.size(mobi_path), File.mtime(mobi_path)] != previous_mobi &&
+                 File.open(mobi_path, "rb") { |f| f.seek(60); f.read(8) == "BOOKMOBI" }
+    # KindleGen uses 1 for warnings and 2 for errors.
+    unless [0, 1].include?(proccess_status.exitstatus) && valid_mobi
+      stream_io.puts
+      stream_io.error "kindlegenの終了状態またはMOBI出力が不正です (終了コード: #{proccess_status.exitstatus})"
+      stream_io.puts stdout_capture unless stdout_capture.empty?
+      return :error
     end
     stream_io.puts "変換しました"
     :success

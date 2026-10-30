@@ -87,7 +87,7 @@ class Device
   end
 
   def connecting?
-    physical_support? && !!get_documents_path
+    physical_support? && (!!get_documents_path || (kindle? && Device.respond_to?(:kindle_mtp_connected?) && Device.kindle_mtp_connected?))
   end
 
   def eject
@@ -141,6 +141,11 @@ class Device
   end
 
   def copy_to_documents(src_file)
+    if kindle? && Device.respond_to?(:kindle_mtp_connected?) && Device.kindle_mtp_connected?
+      destination = Device.kindle_mtp("copy", src_file)
+      FileUtils.rm_f(src_file) if Narou.economy?("send_delete")
+      return destination
+    end
     documents_path = get_documents_path
     if documents_path
       dst_path = File.join(documents_path, File.basename(src_file))
@@ -168,10 +173,6 @@ class Device
     else
       nil
     end
-  rescue SendFailure => e
-    puts
-    error $@.shift + ": #{e.message} (#{e.class})"
-    exit Narou::EXIT_ERROR_CODE
   end
 
   def physical_support?

@@ -708,6 +708,7 @@ class Downloader
     end
   end
 
+  class DownloaderParseError < StandardError; end
   class DownloaderForceRedirect < StandardError; end
 
   #
@@ -768,14 +769,14 @@ class Downloader
     @setting.multi_match(toc_source, "tcode")
     info = NovelInfo.load(@setting, toc_source: toc_source)
     if info
-      raise DownloaderNotFoundError unless info["title"]
+      raise DownloaderParseError, "作品情報のタイトルを取得できませんでした。サイト定義を確認してください" if info["title"].nil? || info["title"].empty?
       @setting["title"] = info["title"]
       @setting["author"] = info["writer"]
       @setting["story"] = info["story"]
     else
       # 小説情報ページがないサイトの場合は目次ページから取得する
       @setting.multi_match(toc_source, "title", "author", "story")
-      raise DownloaderNotFoundError unless @setting.matched?("title")
+      raise DownloaderParseError, "目次のタイトルを取得できませんでした。サイト定義を確認してください" unless @setting.matched?("title")
       story_html = HTML.new(@setting["story"])
       story_html.strip_decoration_tag = true
       @setting["story"] = story_html.to_aozora
@@ -801,6 +802,10 @@ class Downloader
       "subtitles" => subtitles
     }
     toc_objects
+  rescue DownloaderParseError => e
+    raise if through_error
+    @stream.error e.message
+    false
   rescue OpenURI::HTTPError, Errno::ECONNRESET, Errno::ETIMEDOUT, Net::OpenTimeout, IO::TimeoutError => e
     raise if through_error   # エラー処理はしなくていいからそのまま例外を受け取りたい時用
     if e.message.include?("404")

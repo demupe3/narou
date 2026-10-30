@@ -143,16 +143,23 @@ module Command
 
         stream_io.print "#{device.name}へ送信しています"
         ebook_paths.each do |ebook_path|
-          exit_copy = false
-          copy_to_path = nil
-          Thread.abort_on_exception = true
-          Thread.new do
-            copy_to_path = device.copy_to_documents(ebook_path)
-            exit_copy = true
+          # Capture failures inside the child thread: the web server enables
+          # Thread.abort_on_exception, so an uncaught exception stops the server.
+          copy_thread = Thread.new do
+            begin
+              [device.copy_to_documents(ebook_path), nil]
+            rescue StandardError => e
+              [nil, e]
+            end
           end
-          until exit_copy
-            stream_io.print "."
-            sleep(0.5)
+          begin
+            until copy_thread.join(0.5)
+              stream_io.print "."
+            end
+            copy_to_path, copy_error = copy_thread.value
+            raise copy_error if copy_error
+          ensure
+            copy_thread.kill if copy_thread.alive?
           end
           stream_io.puts
           if copy_to_path
@@ -166,7 +173,11 @@ module Command
       if send_all && @options["backup-bookmark"]
         process_backup_bookmark(device)
       end
-    rescue Device::SendFailure, Interrupt
+    rescue Device::SendFailure => e
+      stream_io.puts
+      stream_io.error e.message
+      exit Narou::EXIT_ERROR_CODE
+    rescue Interrupt
       stream_io.puts "送信を中断しました"
       exit Narou::EXIT_INTERRUPT
     end
